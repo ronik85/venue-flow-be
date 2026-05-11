@@ -18,6 +18,7 @@ export class User extends BaseEntity {
 
   @Column({
     name: 'password_hash',
+    select: false,
   })
   passwordHash: string;
 
@@ -33,4 +34,10 @@ export class User extends BaseEntity {
     default: UserRole.USER,
   })
   role: UserRole;
+
+  @Column({
+    name: 'last_login_at',
+    nullable: true,
+  })
+  lastLoginAt?: Date;
 }
