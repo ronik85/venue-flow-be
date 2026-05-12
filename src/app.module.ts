@@ -4,7 +4,10 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { DatabaseModule } from './database/database.module';
+import { EventsModule } from './events/events.module';
+import { SeatsModule } from './seats/seats.module';
 import { UsersModule } from './users/users.module';
+import { VenueModule } from './venue/venue.module';
 
 @Module({
   imports: [
@@ -14,6 +17,9 @@ import { UsersModule } from './users/users.module';
     DatabaseModule,
     AuthModule,
     UsersModule,
+    VenueModule,
+    SeatsModule,
+    EventsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
