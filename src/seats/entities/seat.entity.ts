@@ -1,11 +1,17 @@
-import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
+import {
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  OneToMany,
+} from 'typeorm';
 import { BaseEntity } from '../../database/entities/base.entity';
 import { EventSeat } from '../../events/entities/event-seat.entity';
 import { VenueSection } from '../../venue/entities/venue-section.entity';
 
-@Entity({
-  name: 'seats',
-})
+@Entity({ name: 'seats' })
+@Index(['sectionId', 'row', 'seatNumber'], { unique: true })
 export class Seat extends BaseEntity {
   @Column({ type: 'varchar', length: 10 })
   row: string;

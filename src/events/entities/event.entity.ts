@@ -1,6 +1,7 @@
-import { Venue } from '../../venue/entities/venue.entity';
 import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { BaseEntity } from '../../database/entities/base.entity';
+import { User } from '../../users/entities/user.entity';
+import { Venue } from '../../venue/entities/venue.entity';
 import { EventSeat } from './event-seat.entity';
 
 @Entity({
@@ -22,6 +23,13 @@ export class Event extends BaseEntity {
   @ManyToOne(() => Venue, (venue) => venue.events)
   @JoinColumn({ name: 'venue_id' }) // it will always be on manytoone side becuase it owns the foreign key
   venue: Venue;
+
+  @Column({ name: 'organizer_id', type: 'uuid' })
+  organizerId: string;
+
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'organizer_id' })
+  organizer: User;
 
   @OneToMany(() => EventSeat, (eventSeat) => eventSeat.event, { cascade: true })
   eventSeats: EventSeat[];

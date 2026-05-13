@@ -1,10 +1,19 @@
-import { Column, Entity, JoinColumn, ManyToOne } from 'typeorm';
+import {
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  ManyToOne,
+  VersionColumn,
+} from 'typeorm';
 import { BaseEntity } from '../../database/entities/base.entity';
 import { Seat } from '../../seats/entities/seat.entity';
 import { EventSeatStatus } from './enums/event-seat-status.enum';
 import { Event } from './event.entity';
 
 @Entity({ name: 'event_seats' })
+@Index(['eventId', 'status'])
+@Index(['eventId', 'seatId'], { unique: true })
 export class EventSeat extends BaseEntity {
   @Column({ name: 'event_id', type: 'uuid' })
   eventId: string;
@@ -29,4 +38,7 @@ export class EventSeat extends BaseEntity {
     default: EventSeatStatus.AVAILABLE,
   })
   status: EventSeatStatus;
+
+  @VersionColumn()
+  version: number;
 }
