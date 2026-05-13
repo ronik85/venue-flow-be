@@ -31,6 +31,8 @@ export class Event extends BaseEntity {
   @JoinColumn({ name: 'organizer_id' })
   organizer: User;
 
-  @OneToMany(() => EventSeat, (eventSeat) => eventSeat.event, { cascade: true })
+  @OneToMany(() => EventSeat, (eventSeat) => eventSeat.event, {
+    cascade: ['insert'],
+  })
   eventSeats: EventSeat[];
 }

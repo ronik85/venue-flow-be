@@ -25,7 +25,9 @@ export class EventSeat extends BaseEntity {
   @Column({ name: 'seat_id', type: 'uuid' })
   seatId: string;
 
-  @ManyToOne(() => Seat)
+  @ManyToOne(() => Seat, {
+    onDelete: 'RESTRICT',
+  })
   @JoinColumn({ name: 'seat_id' })
   seat: Seat;
 
