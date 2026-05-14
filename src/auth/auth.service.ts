@@ -4,6 +4,7 @@ import * as bcrypt from 'bcrypt';
 import { User } from 'src/users/entities/user.entity';
 import { UsersService } from 'src/users/users.service';
 import { RegisterDto } from './dto/register.dto';
+import { JwtUser } from './interfaces/request-with-user.interface';
 @Injectable()
 export class AuthService {
   constructor(
@@ -29,10 +30,10 @@ export class AuthService {
 
   async login(user: User): Promise<{
     access_token: string;
-    user: { id: string; email: string; role: string };
+    user: JwtUser;
   }> {
     await this.usersService.updateLastLogin(user.id);
-    const payload = { email: user.email, sub: user.id, role: user.role };
+    const payload = { email: user.email, id: user.id, role: user.role };
     return {
       access_token: this.jwtService.sign(payload),
       user: {
