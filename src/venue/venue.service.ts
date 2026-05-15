@@ -1,10 +1,20 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
+
 import { Seat } from '../seats/entities/seat.entity';
+
 import { BulkCreateSeatsDto } from './dto/bulk-create-seats.dto';
+import { BulkUpdateSeatsDto } from './dto/bulk-update-seats.dto';
 import { CreateSectionDto } from './dto/create-section.dto';
 import { CreateVenueDto } from './dto/create-venue.dto';
+import { UpdateSectionDto } from './dto/update-section.dto';
+import { UpdateVenueDto } from './dto/update-venue.dto';
+
 import { VenueSection } from './entities/venue-section.entity';
 import { Venue } from './entities/venue.entity';
 
@@ -13,20 +23,33 @@ export class VenueService {
   constructor(
     @InjectRepository(Venue)
     private readonly venueRepository: Repository<Venue>,
+
     @InjectRepository(VenueSection)
     private readonly sectionRepository: Repository<VenueSection>,
+
     @InjectRepository(Seat)
     private readonly seatRepository: Repository<Seat>,
-  ) {}
+
+    private readonly dataSource: DataSource,
+  ) { }
 
   async createVenue(dto: CreateVenueDto) {
     const venue = this.venueRepository.create(dto);
-    return await this.venueRepository.save(venue);
+
+    const savedVenue = await this.venueRepository.save(venue);
+
+    return {
+      message: 'Venue created successfully',
+      data: savedVenue,
+    };
   }
 
   async findAllVenues() {
     return await this.venueRepository.find({
       relations: ['sections'],
+      order: {
+        createdAt: 'DESC',
+      },
     });
   }
 
@@ -35,9 +58,11 @@ export class VenueService {
       where: { id },
       relations: ['sections', 'sections.seats'],
     });
+
     if (!venue) {
       throw new NotFoundException(`Venue with ID ${id} not found`);
     }
+
     return venue;
   }
 
@@ -45,29 +70,41 @@ export class VenueService {
     const venueExists = await this.venueRepository.existsBy({
       id: dto.venueId,
     });
+
     if (!venueExists) {
-      throw new NotFoundException(`Venue with ID ${dto.venueId} not found`);
+      throw new NotFoundException(
+        `Venue with ID ${dto.venueId} not found`,
+      );
     }
+
     const section = this.sectionRepository.create(dto);
-    return await this.sectionRepository.save(section);
+
+    const savedSection = await this.sectionRepository.save(section);
+
+    return {
+      message: 'Venue section created successfully',
+      data: savedSection,
+    };
   }
 
   async bulkCreateSeats(dto: BulkCreateSeatsDto) {
-    const sectionExists = await this.sectionRepository.existsBy({
-      id: dto.sectionId,
+    const section = await this.sectionRepository.findOne({
+      where: { id: dto.sectionId },
     });
-    if (!sectionExists) {
+
+    if (!section) {
       throw new NotFoundException(
         `Venue section with ID ${dto.sectionId} not found`,
       );
     }
 
     const seats: Seat[] = [];
+
     for (const row of dto.rows) {
       for (let i = 1; i <= dto.seatsPerRow; i++) {
         seats.push(
           this.seatRepository.create({
-            row,
+            row: row.trim().toUpperCase(),
             seatNumber: String(i),
             sectionId: dto.sectionId,
           }),
@@ -75,6 +112,135 @@ export class VenueService {
       }
     }
 
-    return await this.seatRepository.save(seats);
+    const existingSeats = await this.seatRepository.find({
+      where: {
+        sectionId: dto.sectionId,
+      },
+      select: ['row', 'seatNumber'],
+    });
+
+    const existingSeatSet = new Set(
+      existingSeats.map(
+        (seat) => `${seat.row}-${seat.seatNumber}`,
+      ),
+    );
+
+    const duplicateSeats = seats.filter((seat) =>
+      existingSeatSet.has(`${seat.row}-${seat.seatNumber}`),
+    );
+
+    if (duplicateSeats.length > 0) {
+      throw new BadRequestException(
+        'Some seats already exist in this section',
+      );
+    }
+
+    const savedSeats = await this.dataSource.transaction(
+      async (manager) => {
+        return await manager.save(seats);
+      },
+    );
+
+    return {
+      message: 'Seats created successfully',
+      count: savedSeats.length,
+    };
+  }
+
+  async updateVenue(id: string, dto: UpdateVenueDto) {
+    const venue = await this.findVenueById(id);
+
+    const updatedVenue = this.venueRepository.merge(venue, dto);
+
+    const savedVenue =
+      await this.venueRepository.save(updatedVenue);
+
+    return {
+      message: 'Venue updated successfully',
+      data: savedVenue,
+    };
+  }
+
+  async deleteVenue(id: string) {
+    const venue = await this.findVenueById(id);
+
+    await this.venueRepository.remove(venue);
+
+    return {
+      message: 'Venue deleted successfully',
+    };
+  }
+
+  async updateSection(id: string, dto: UpdateSectionDto) {
+    const section = await this.sectionRepository.findOne({
+      where: { id },
+    });
+
+    if (!section) {
+      throw new NotFoundException(
+        `Venue section with ID ${id} not found`,
+      );
+    }
+
+    const updatedSection =
+      this.sectionRepository.merge(section, dto);
+
+    const savedSection =
+      await this.sectionRepository.save(updatedSection);
+
+    return {
+      message: 'Venue section updated successfully',
+      data: savedSection,
+    };
+  }
+
+  async deleteSection(id: string) {
+    const section = await this.sectionRepository.findOne({
+      where: { id },
+    });
+
+    if (!section) {
+      throw new NotFoundException(
+        `Venue section with ID ${id} not found`,
+      );
+    }
+
+    await this.sectionRepository.remove(section);
+
+    return {
+      message: 'Venue section deleted successfully',
+    };
+  }
+
+  async bulkUpdateSeats(dto: BulkUpdateSeatsDto) {
+    if (!dto.seatIds || dto.seatIds.length === 0) {
+      throw new BadRequestException(
+        'Seat IDs are required',
+      );
+    }
+
+    const seats = await this.seatRepository.findBy({
+      id: In(dto.seatIds),
+    });
+
+    if (seats.length !== dto.seatIds.length) {
+      throw new NotFoundException(
+        'Some seats were not found',
+      );
+    }
+
+    await this.seatRepository.update(
+      {
+        id: In(dto.seatIds),
+      },
+      {
+        isAccessible: dto.isAccessible,
+      },
+    );
+
+    return {
+      message: 'Seats updated successfully',
+      updatedCount: dto.seatIds.length,
+    };
   }
 }
