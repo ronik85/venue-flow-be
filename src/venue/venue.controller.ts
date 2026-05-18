@@ -1,19 +1,28 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { UserRole } from '../users/entities/user.entity';
 import { BulkCreateSeatsDto } from './dto/bulk-create-seats.dto';
+import { BulkUpdateSeatsDto } from './dto/bulk-update-seats.dto';
 import { CreateSectionDto } from './dto/create-section.dto';
 import { CreateVenueDto } from './dto/create-venue.dto';
-import { UpdateVenueDto } from './dto/update-venue.dto';
 import { UpdateSectionDto } from './dto/update-section.dto';
-import { BulkUpdateSeatsDto } from './dto/bulk-update-seats.dto';
+import { UpdateVenueDto } from './dto/update-venue.dto';
 import { VenueService } from './venue.service';
 
 @Controller('venues')
 export class VenueController {
-  constructor(private readonly venueService: VenueService) { }
+  constructor(private readonly venueService: VenueService) {}
 
   @Get()
   async findAllVenues() {
@@ -49,7 +58,10 @@ export class VenueController {
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ORGANIZER, UserRole.ADMIN)
-  async updateVenue(@Param('id') id: string, @Body() updateVenueDto: UpdateVenueDto) {
+  async updateVenue(
+    @Param('id') id: string,
+    @Body() updateVenueDto: UpdateVenueDto,
+  ) {
     return await this.venueService.updateVenue(id, updateVenueDto);
   }
 
@@ -61,22 +73,25 @@ export class VenueController {
   }
 
   @Patch('sections/:sectionId')
-  // @UseGuards(JwtAuthGuard, RolesGuard)
-  // @Roles(UserRole.ORGANIZER, UserRole.ADMIN)
-  async updateSection(@Param('sectionId') sectionId: string, @Body() updateSectionDto: UpdateSectionDto) {
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ORGANIZER, UserRole.ADMIN)
+  async updateSection(
+    @Param('sectionId') sectionId: string,
+    @Body() updateSectionDto: UpdateSectionDto,
+  ) {
     return await this.venueService.updateSection(sectionId, updateSectionDto);
   }
 
   @Delete('sections/:sectionId')
-  // @UseGuards(JwtAuthGuard, RolesGuard)
-  // @Roles(UserRole.ORGANIZER, UserRole.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ORGANIZER, UserRole.ADMIN)
   async deleteSection(@Param('sectionId') sectionId: string) {
     return await this.venueService.deleteSection(sectionId);
   }
 
   @Patch('seats/bulk')
-  // @UseGuards(JwtAuthGuard, RolesGuard)
-  // @Roles(UserRole.ORGANIZER, UserRole.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ORGANIZER, UserRole.ADMIN)
   async bulkUpdateSeats(@Body() bulkUpdateSeatsDto: BulkUpdateSeatsDto) {
     return await this.venueService.bulkUpdateSeats(bulkUpdateSeatsDto);
   }
