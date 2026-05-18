@@ -10,6 +10,7 @@ import { Venue } from '../venue/entities/venue.entity';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventSeatStatus } from './entities/enums/event-seat-status.enum';
+import { EventStatus } from './entities/enums/event-status.enum';
 import { EventSeat } from './entities/event-seat.entity';
 import { Event } from './entities/event.entity';
 
@@ -138,6 +139,7 @@ export class EventsService {
     if (dto.title !== undefined) event.title = dto.title;
     if (dto.description !== undefined) event.description = dto.description;
     if (dto.startTime !== undefined) event.startTime = new Date(dto.startTime);
+    if (dto.status !== undefined) event.status = dto.status;
 
     const updatedEvent = await this.eventRepository.save(event);
     return {

@@ -1,4 +1,4 @@
-import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsDateString, IsEnum, IsNumber, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 import { EventStatus } from '../entities/enums/event-status.enum';
 
 
@@ -19,7 +19,7 @@ export class UpdateEventDto {
   @IsOptional()
   status?: EventStatus;
 
-  @IsString()
+  @IsUUID('4')
   @IsOptional()
   venueId?: string;
 
