@@ -21,7 +21,7 @@ export class Event extends BaseEntity {
   venueId: string;
 
   @ManyToOne(() => Venue, (venue) => venue.events)
-  @JoinColumn({ name: 'venue_id' }) // it will always be on manytoone side becuase it owns the foreign key
+  @JoinColumn({ name: 'venue_id' }) // it will always be on ManyToOne side becuase it owns the foreign key
   venue: Venue;
 
   @Column({ name: 'organizer_id', type: 'uuid' })
