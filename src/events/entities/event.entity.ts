@@ -2,6 +2,7 @@ import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { BaseEntity } from '../../database/entities/base.entity';
 import { User } from '../../users/entities/user.entity';
 import { Venue } from '../../venue/entities/venue.entity';
+import { EventStatus } from './enums/event-status.enum';
 import { EventSeat } from './event-seat.entity';
 
 @Entity({
@@ -16,6 +17,13 @@ export class Event extends BaseEntity {
 
   @Column({ name: 'start_time', type: 'timestamptz' })
   startTime: Date;
+
+  @Column({
+    type: 'enum',
+    enum: EventStatus,
+    default: EventStatus.DRAFT,
+  })
+  status: EventStatus;
 
   @Column({ name: 'venue_id', type: 'uuid' })
   venueId: string;
