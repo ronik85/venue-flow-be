@@ -10,7 +10,6 @@ import { Venue } from '../venue/entities/venue.entity';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventSeatStatus } from './entities/enums/event-seat-status.enum';
-import { EventStatus } from './entities/enums/event-status.enum';
 import { EventSeat } from './entities/event-seat.entity';
 import { Event } from './entities/event.entity';
 
@@ -26,11 +25,12 @@ export class EventsService {
     @InjectRepository(Seat)
     private readonly seatRepository: Repository<Seat>,
     private readonly dataSource: DataSource,
-  ) { }
-
+  ) {}
 
   async createEvent(dto: CreateEventDto, organizerId: string) {
-    const venueExists = await this.venueRepository.existsBy({ id: dto.venueId });
+    const venueExists = await this.venueRepository.existsBy({
+      id: dto.venueId,
+    });
     if (!venueExists) {
       throw new NotFoundException(`Venue with ID ${dto.venueId} not found`);
     }
@@ -77,7 +77,6 @@ export class EventsService {
     };
   }
 
-
   async listEvents() {
     const events = await this.eventRepository.find({
       relations: { venue: true },
@@ -90,7 +89,6 @@ export class EventsService {
       data: events,
     };
   }
-
 
   async getEventById(id: string) {
     const event = await this.eventRepository.findOne({
@@ -128,7 +126,9 @@ export class EventsService {
     }
 
     if (dto.venueId && dto.venueId !== event.venueId) {
-      const venueExists = await this.venueRepository.existsBy({ id: dto.venueId });
+      const venueExists = await this.venueRepository.existsBy({
+        id: dto.venueId,
+      });
       if (!venueExists) {
         throw new NotFoundException(`Venue with ID ${dto.venueId} not found`);
       }
