@@ -39,11 +39,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
     };
 
-    console.error('Error:', {
-      path: request.url,
-      status,
-      exception,
-    });
+    if (status >= 500) {
+      console.error('Error:', {
+        path: request.url,
+        status,
+        exception,
+      });
+    }
 
     response.status(status).json(errorResponse);
   }
