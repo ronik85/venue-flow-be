@@ -8,6 +8,7 @@ import { EventsModule } from './events/events.module';
 import { SeatsModule } from './seats/seats.module';
 import { UsersModule } from './users/users.module';
 import { VenueModule } from './venue/venue.module';
+import { BookingsModule } from './bookings/bookings.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { VenueModule } from './venue/venue.module';
     VenueModule,
     SeatsModule,
     EventsModule,
+    BookingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -25,7 +25,7 @@ export class EventsService {
     @InjectRepository(Seat)
     private readonly seatRepository: Repository<Seat>,
     private readonly dataSource: DataSource,
-  ) {}
+  ) { }
 
   async createEvent(dto: CreateEventDto, organizerId: string) {
     const venueExists = await this.venueRepository.existsBy({

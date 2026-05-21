@@ -1,0 +1,330 @@
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, In, Repository } from 'typeorm';
+import { EventSeatStatus } from '../events/entities/enums/event-seat-status.enum';
+import { EventStatus } from '../events/entities/enums/event-status.enum';
+import { EventSeat } from '../events/entities/event-seat.entity';
+import { Event } from '../events/entities/event.entity';
+import { UserRole } from '../users/entities/user.entity';
+import { CancelBookingDto } from './dto/cancel-booking.dto';
+import { CreateBookingDto } from './dto/create-booking.dto';
+import { ListBookingsQueryDto } from './dto/list-bookings-query.dto';
+import { BookingItem } from './entities/booking-item.entity';
+import { Booking } from './entities/booking.entity';
+import { BookingStatus } from './entities/enums/booking-status.enum';
+
+@Injectable()
+export class BookingsService {
+  private readonly logger = new Logger(BookingsService.name);
+
+  constructor(
+    @InjectRepository(Booking)
+    private readonly bookingRepository: Repository<Booking>,
+
+    @InjectRepository(BookingItem)
+    private readonly bookingItemRepository: Repository<BookingItem>,
+
+    @InjectRepository(EventSeat)
+    private readonly eventSeatRepository: Repository<EventSeat>,
+
+    @InjectRepository(Event)
+    private readonly eventRepository: Repository<Event>,
+
+    private readonly dataSource: DataSource,
+  ) { }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // WRITE OPERATIONS
+  // ────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * POST /bookings
+   *
+   * Creates a PENDING booking and locks the requested seats.
+   * Uses `SELECT … FOR UPDATE SKIP LOCKED` inside a SERIALIZABLE transaction
+   * so two concurrent requests for the same seat never both succeed.
+   *
+   * Seat status flow:  AVAILABLE → LOCKED (here) → BOOKED (on confirm)
+   */
+  async createBooking(dto: CreateBookingDto, userId: string) {
+    const event = await this.eventRepository.findOneBy({ id: dto.eventId });
+
+    if (!event) {
+      throw new NotFoundException(`Event ${dto.eventId} not found`);
+    }
+
+    if (event.status !== EventStatus.PUBLISHED) {
+      throw new BadRequestException(
+        `Bookings are only allowed for PUBLISHED events (current status: ${event.status})`,
+      );
+    }
+
+    const booking = await this.dataSource.transaction(
+      'SERIALIZABLE',
+      async (manager) => {
+        const lockedSeats = await manager
+          .createQueryBuilder(EventSeat, 'es')
+          .setLock('pessimistic_write', undefined, ['SKIP LOCKED'])
+          .where('es.id IN (:...ids)', { ids: dto.eventSeatIds })
+          .andWhere('es.event_id = :eventId', { eventId: dto.eventId })
+          .getMany();
+
+        // Every requested seat must be present and lockable.
+        if (lockedSeats.length !== dto.eventSeatIds.length) {
+          const foundIds = new Set(lockedSeats.map((s) => s.id));
+          const missing = dto.eventSeatIds.filter((id) => !foundIds.has(id));
+          throw new NotFoundException(
+            `Event-seat IDs not found or already locked by another request: ${missing.join(', ')}`,
+          );
+        }
+
+        // Reject seats that are not AVAILABLE.
+        const unavailable = lockedSeats.filter(
+          (s) => s.status !== EventSeatStatus.AVAILABLE,
+        );
+        if (unavailable.length > 0) {
+          throw new ConflictException(
+            `The following seats are not available: ${unavailable.map((s) => s.id).join(', ')}`,
+          );
+        }
+
+        // Calculate total from actual seat prices.
+        const totalAmount = lockedSeats.reduce(
+          (sum, seat) => sum + parseFloat(seat.price),
+          0,
+        );
+
+        // Persist the booking header.
+        const newBooking = manager.create(Booking, {
+          userId,
+          eventId: dto.eventId,
+          status: BookingStatus.PENDING,
+          totalAmount: totalAmount.toFixed(2),
+        });
+        const savedBooking = await manager.save(newBooking);
+
+        // Persist one item per seat, snapshotting price at booking time.
+        const items = lockedSeats.map((seat) =>
+          manager.create(BookingItem, {
+            bookingId: savedBooking.id,
+            eventSeatId: seat.id,
+            priceAtBooking: seat.price,
+          }),
+        );
+        await manager.save(items);
+
+        // Hold the seats so other users cannot select them.
+        await manager.update(
+          EventSeat,
+          { id: In(lockedSeats.map((s) => s.id)) },
+          { status: EventSeatStatus.LOCKED },
+        );
+
+        return savedBooking;
+      },
+    );
+
+    this.logger.log(
+      `Booking ${booking.id} created (PENDING) for user ${userId} — ${dto.eventSeatIds.length} seat(s) locked`,
+    );
+
+    return {
+      message: 'Booking created successfully — awaiting confirmation',
+      data: await this.findBookingWithDetails(booking.id),
+    };
+  }
+
+  /**
+   * PATCH /bookings/:id/confirm
+   *
+   * Transitions a PENDING booking to CONFIRMED and permanently marks
+   * all its seats as BOOKED.  Only the booking owner or an ADMIN may confirm.
+   */
+  async confirmBooking(bookingId: string, userId: string, userRole: UserRole) {
+    const booking = await this.findBookingOwnedBy(bookingId, userId, userRole);
+
+    if (booking.status !== BookingStatus.PENDING) {
+      throw new BadRequestException(
+        `Only PENDING bookings can be confirmed (current: ${booking.status})`,
+      );
+    }
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.update(Booking, booking.id, {
+        status: BookingStatus.CONFIRMED,
+      });
+
+      const seatIds = booking.items.map((i) => i.eventSeatId);
+      if (seatIds.length > 0) {
+        await manager.update(
+          EventSeat,
+          { id: In(seatIds) },
+          { status: EventSeatStatus.BOOKED },
+        );
+      }
+    });
+
+    this.logger.log(`Booking ${bookingId} confirmed by user ${userId}`);
+
+    return {
+      message: 'Booking confirmed successfully',
+      data: await this.findBookingWithDetails(bookingId),
+    };
+  }
+
+  /**
+   * DELETE /bookings/:id
+   *
+   * Cancels a PENDING or CONFIRMED booking and releases seats back to AVAILABLE.
+   * - Owners may cancel their own bookings in any non-cancelled state.
+   * - Admins may cancel any booking.
+   */
+  async cancelBooking(
+    bookingId: string,
+    dto: CancelBookingDto,
+    userId: string,
+    userRole: UserRole,
+  ) {
+    const booking = await this.findBookingOwnedBy(bookingId, userId, userRole);
+
+    if (booking.status === BookingStatus.CANCELLED) {
+      throw new BadRequestException('Booking is already cancelled');
+    }
+
+    await this.dataSource.transaction(async (manager) => {
+      await manager.update(Booking, booking.id, {
+        status: BookingStatus.CANCELLED,
+        cancelledAt: new Date(),
+        cancellationReason: dto.reason ?? undefined,
+      });
+
+      // Release seats regardless of whether they were LOCKED or BOOKED.
+      const seatIds = booking.items.map((i) => i.eventSeatId);
+      if (seatIds.length > 0) {
+        await manager.update(
+          EventSeat,
+          { id: In(seatIds) },
+          { status: EventSeatStatus.AVAILABLE },
+        );
+      }
+    });
+
+    this.logger.log(
+      `Booking ${bookingId} cancelled by user ${userId} (role: ${userRole}). Reason: ${dto.reason ?? 'N/A'}`,
+    );
+
+    return {
+      message: 'Booking cancelled successfully',
+      data: await this.findBookingWithDetails(bookingId),
+    };
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // READ OPERATIONS
+  // ────────────────────────────────────────────────────────────────────────────
+
+  /** Return the authenticated user's own bookings, newest first. */
+  async getMyBookings(userId: string) {
+    const bookings = await this.bookingRepository.find({
+      where: { userId },
+      relations: {
+        event: { venue: true },
+        items: { eventSeat: { seat: { section: true } } },
+      },
+      order: { createdAt: 'DESC' },
+    });
+
+    return {
+      message: 'Bookings retrieved successfully',
+      total: bookings.length,
+      data: bookings,
+    };
+  }
+
+  async getBookingById(bookingId: string, userId: string, userRole: UserRole) {
+    const booking = await this.findBookingOwnedBy(bookingId, userId, userRole);
+    return {
+      message: 'Booking retrieved successfully',
+      data: booking,
+    };
+  }
+
+  async adminListBookings(query: ListBookingsQueryDto) {
+    const where = query.status ? { status: query.status } : {};
+
+    const bookings = await this.bookingRepository.find({
+      where,
+      relations: {
+        event: { venue: true },
+        user: true,
+        items: { eventSeat: { seat: { section: true } } },
+      },
+      order: { createdAt: 'DESC' },
+    });
+
+    return {
+      message: 'All bookings retrieved successfully',
+      total: bookings.length,
+      data: bookings,
+    };
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // PRIVATE HELPERS
+  // ────────────────────────────────────────────────────────────────────────────
+
+  private async findBookingWithDetails(bookingId: string): Promise<Booking> {
+    const booking = await this.bookingRepository.findOne({
+      where: { id: bookingId },
+      relations: {
+        event: { venue: true },
+        user: true,
+        items: { eventSeat: { seat: { section: true } } },
+      },
+    });
+
+    if (!booking) {
+      throw new NotFoundException(`Booking ${bookingId} not found`);
+    }
+
+    return booking;
+  }
+
+  /**
+   * Loads a booking and asserts ownership.
+   * Admins bypass the ownership check.
+   */
+  private async findBookingOwnedBy(
+    bookingId: string,
+    userId: string,
+    userRole: UserRole,
+  ): Promise<Booking> {
+    const booking = await this.bookingRepository.findOne({
+      where: { id: bookingId },
+      relations: {
+        event: { venue: true },
+        user: true,
+        items: { eventSeat: { seat: { section: true } } },
+      },
+    });
+
+    if (!booking) {
+      throw new NotFoundException(`Booking ${bookingId} not found`);
+    }
+
+    if (userRole !== UserRole.ADMIN && booking.userId !== userId) {
+      throw new ForbiddenException(
+        'You do not have permission to access this booking',
+      );
+    }
+
+    return booking;
+  }
+}
