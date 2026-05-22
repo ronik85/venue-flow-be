@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -17,6 +18,7 @@ import { BulkCreateSeatsDto } from './dto/bulk-create-seats.dto';
 import { BulkUpdateSeatsDto } from './dto/bulk-update-seats.dto';
 import { CreateSectionDto } from './dto/create-section.dto';
 import { CreateVenueDto } from './dto/create-venue.dto';
+import { ListVenuesQueryDto } from './dto/list-venues-query.dto';
 import { UpdateSectionDto } from './dto/update-section.dto';
 import { UpdateVenueDto } from './dto/update-venue.dto';
 import { VenueService } from './venue.service';
@@ -24,15 +26,15 @@ import { VenueService } from './venue.service';
 @ApiTags('Venues')
 @Controller('venues')
 export class VenueController {
-  constructor(private readonly venueService: VenueService) {}
+  constructor(private readonly venueService: VenueService) { }
 
   // ── Public ──────────────────────────────────────────────────────────────────
 
   @Get()
-  @ApiOperation({ summary: 'List all venues' })
-  @ApiResponse({ status: 200, description: 'Array of venues with sections' })
-  async findAllVenues() {
-    return await this.venueService.findAllVenues();
+  @ApiOperation({ summary: 'List all venues with pagination, search and sorting (public)' })
+  @ApiResponse({ status: 200, description: 'Paginated list of venues with sections' })
+  async findAllVenues(@Query() query: ListVenuesQueryDto) {
+    return await this.venueService.findAllVenues(query);
   }
 
   @Get(':id')

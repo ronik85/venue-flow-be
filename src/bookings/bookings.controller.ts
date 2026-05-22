@@ -30,6 +30,7 @@ import { BookingsService } from './bookings.service';
 import { CancelBookingDto } from './dto/cancel-booking.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { ListBookingsQueryDto } from './dto/list-bookings-query.dto';
+import { ListMyBookingsQueryDto } from './dto/list-my-bookings-query.dto';
 import { BookingStatus } from './entities/enums/booking-status.enum';
 
 @ApiTags('Bookings')
@@ -59,10 +60,13 @@ export class BookingsController {
   }
 
   @Get('me')
-  @ApiOperation({ summary: "List the authenticated user's own bookings" })
-  @ApiResponse({ status: 200, description: 'Array of bookings, newest first' })
-  async getMyBookings(@CurrentUser() user: JwtUser) {
-    return this.bookingsService.getMyBookings(user.id);
+  @ApiOperation({ summary: "List the authenticated user's own bookings with optional filter and pagination" })
+  @ApiResponse({ status: 200, description: 'Paginated list of own bookings' })
+  async getMyBookings(
+    @CurrentUser() user: JwtUser,
+    @Query() query: ListMyBookingsQueryDto,
+  ) {
+    return this.bookingsService.getMyBookings(user.id, query);
   }
 
   @Get(':id')
@@ -118,14 +122,8 @@ export class BookingsController {
 
   @Get()
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'List all bookings  [ADMIN]' })
-  @ApiQuery({
-    name: 'status',
-    required: false,
-    enum: BookingStatus,
-    description: 'Filter by booking status',
-  })
-  @ApiResponse({ status: 200, description: 'All bookings, newest first' })
+  @ApiOperation({ summary: 'List all bookings with pagination, filters and sorting [ADMIN]' })
+  @ApiResponse({ status: 200, description: 'Paginated list of all bookings' })
   async adminListBookings(@Query() query: ListBookingsQueryDto) {
     return this.bookingsService.adminListBookings(query);
   }

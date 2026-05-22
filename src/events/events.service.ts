@@ -7,11 +7,15 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
+import { buildPaginatedResponse } from '../common/dto/paginated-response.helper';
+import { SortOrder } from '../common/dto/pagination-query.dto';
 import { Seat } from '../seats/entities/seat.entity';
 import { JwtUser } from '../auth/interfaces/request-with-user.interface';
 import { UserRole } from '../users/entities/user.entity';
 import { Venue } from '../venue/entities/venue.entity';
 import { CreateEventDto } from './dto/create-event.dto';
+import { ListEventSeatsQueryDto } from './dto/list-event-seats-query.dto';
+import { ListEventsQueryDto } from './dto/list-events-query.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventSeatStatus } from './entities/enums/event-seat-status.enum';
 import { EventStatus } from './entities/enums/event-status.enum';
@@ -94,17 +98,39 @@ export class EventsService {
 
   // ─── List ──────────────────────────────────────────────────────────────────
 
-  async listEvents() {
-    const events = await this.eventRepository.find({
-      relations: { venue: true },
-      order: { startTime: 'ASC' },
-    });
+  async listEvents(query: ListEventsQueryDto) {
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      status,
+      venueId,
+      sortBy = 'startTime',
+      sortOrder = SortOrder.ASC,
+    } = query;
 
-    return {
-      message: 'Events retrieved successfully',
-      total: events.length,
-      data: events,
-    };
+    const skip = (page - 1) * limit;
+
+    const qb = this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.venue', 'venue')
+      .orderBy(`event.${sortBy}`, sortOrder)
+      .skip(skip)
+      .take(limit);
+
+    if (search) {
+      qb.andWhere('event.title ILIKE :search', { search: `%${search}%` });
+    }
+    if (status) {
+      qb.andWhere('event.status = :status', { status });
+    }
+    if (venueId) {
+      qb.andWhere('event.venueId = :venueId', { venueId });
+    }
+
+    const [events, total] = await qb.getManyAndCount();
+
+    return buildPaginatedResponse('Events retrieved successfully', events, total, page, limit);
   }
 
   // ─── Get by ID ─────────────────────────────────────────────────────────────
@@ -132,17 +158,33 @@ export class EventsService {
 
   // ─── Get Seats ─────────────────────────────────────────────────────────────
 
-  async getEventSeats(eventId: string) {
+  async getEventSeats(eventId: string, query: ListEventSeatsQueryDto) {
     const eventExists = await this.eventRepository.existsBy({ id: eventId });
     if (!eventExists) {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
-    const eventSeats = await this.eventSeatRepository.find({
-      where: { eventId },
-      relations: { seat: true },
-      order: { seat: { row: 'ASC', seatNumber: 'ASC' } },
-    });
+    const {
+      status,
+      row,
+      sortBy = 'row',
+      sortOrder = SortOrder.ASC,
+    } = query;
+
+    const qb = this.eventSeatRepository
+      .createQueryBuilder('es')
+      .leftJoinAndSelect('es.seat', 'seat')
+      .where('es.eventId = :eventId', { eventId })
+      .orderBy(`seat.${sortBy}`, sortOrder);
+
+    if (status) {
+      qb.andWhere('es.status = :status', { status });
+    }
+    if (row) {
+      qb.andWhere('seat.row = :row', { row: row.toUpperCase() });
+    }
+
+    const eventSeats = await qb.getMany();
 
     const data = eventSeats.map((es) => ({
       id: es.id,

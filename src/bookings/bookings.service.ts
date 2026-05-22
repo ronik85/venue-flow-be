@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
+import { buildPaginatedResponse } from '../common/dto/paginated-response.helper';
+import { SortOrder } from '../common/dto/pagination-query.dto';
 import { EventSeatStatus } from '../events/entities/enums/event-seat-status.enum';
 import { EventStatus } from '../events/entities/enums/event-status.enum';
 import { EventSeat } from '../events/entities/event-seat.entity';
@@ -16,6 +18,7 @@ import { UserRole } from '../users/entities/user.entity';
 import { CancelBookingDto } from './dto/cancel-booking.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { ListBookingsQueryDto } from './dto/list-bookings-query.dto';
+import { ListMyBookingsQueryDto } from './dto/list-my-bookings-query.dto';
 import { BookingItem } from './entities/booking-item.entity';
 import { Booking } from './entities/booking.entity';
 import { BookingStatus } from './entities/enums/booking-status.enum';
@@ -231,22 +234,38 @@ export class BookingsService {
   // READ OPERATIONS
   // ────────────────────────────────────────────────────────────────────────────
 
-  /** Return the authenticated user's own bookings, newest first. */
-  async getMyBookings(userId: string) {
-    const bookings = await this.bookingRepository.find({
-      where: { userId },
-      relations: {
-        event: { venue: true },
-        items: { eventSeat: { seat: { section: true } } },
-      },
-      order: { createdAt: 'DESC' },
-    });
+  /** Return the authenticated user's own bookings with optional status filter and pagination. */
+  async getMyBookings(userId: string, query: ListMyBookingsQueryDto) {
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      sortBy = 'createdAt',
+      sortOrder = SortOrder.DESC,
+    } = query;
 
-    return {
-      message: 'Bookings retrieved successfully',
-      total: bookings.length,
-      data: bookings,
-    };
+    const skip = (page - 1) * limit;
+
+    const qb = this.bookingRepository
+      .createQueryBuilder('booking')
+      .leftJoinAndSelect('booking.event', 'event')
+      .leftJoinAndSelect('event.venue', 'venue')
+      .leftJoinAndSelect('booking.items', 'items')
+      .leftJoinAndSelect('items.eventSeat', 'eventSeat')
+      .leftJoinAndSelect('eventSeat.seat', 'seat')
+      .leftJoinAndSelect('seat.section', 'section')
+      .where('booking.userId = :userId', { userId })
+      .orderBy(`booking.${sortBy}`, sortOrder)
+      .skip(skip)
+      .take(limit);
+
+    if (status) {
+      qb.andWhere('booking.status = :status', { status });
+    }
+
+    const [bookings, total] = await qb.getManyAndCount();
+
+    return buildPaginatedResponse('Bookings retrieved successfully', bookings, total, page, limit);
   }
 
   async getBookingById(bookingId: string, userId: string, userRole: UserRole) {
@@ -258,23 +277,44 @@ export class BookingsService {
   }
 
   async adminListBookings(query: ListBookingsQueryDto) {
-    const where = query.status ? { status: query.status } : {};
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      eventId,
+      userId,
+      sortBy = 'createdAt',
+      sortOrder = SortOrder.DESC,
+    } = query;
 
-    const bookings = await this.bookingRepository.find({
-      where,
-      relations: {
-        event: { venue: true },
-        user: true,
-        items: { eventSeat: { seat: { section: true } } },
-      },
-      order: { createdAt: 'DESC' },
-    });
+    const skip = (page - 1) * limit;
 
-    return {
-      message: 'All bookings retrieved successfully',
-      total: bookings.length,
-      data: bookings,
-    };
+    const qb = this.bookingRepository
+      .createQueryBuilder('booking')
+      .leftJoinAndSelect('booking.event', 'event')
+      .leftJoinAndSelect('event.venue', 'venue')
+      .leftJoinAndSelect('booking.user', 'user')
+      .leftJoinAndSelect('booking.items', 'items')
+      .leftJoinAndSelect('items.eventSeat', 'eventSeat')
+      .leftJoinAndSelect('eventSeat.seat', 'seat')
+      .leftJoinAndSelect('seat.section', 'section')
+      .orderBy(`booking.${sortBy}`, sortOrder)
+      .skip(skip)
+      .take(limit);
+
+    if (status) {
+      qb.andWhere('booking.status = :status', { status });
+    }
+    if (eventId) {
+      qb.andWhere('booking.eventId = :eventId', { eventId });
+    }
+    if (userId) {
+      qb.andWhere('booking.userId = :userId', { userId });
+    }
+
+    const [bookings, total] = await qb.getManyAndCount();
+
+    return buildPaginatedResponse('All bookings retrieved successfully', bookings, total, page, limit);
   }
 
   // ────────────────────────────────────────────────────────────────────────────

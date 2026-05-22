@@ -5,6 +5,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
+import { buildPaginatedResponse } from '../common/dto/paginated-response.helper';
+import { SortOrder } from '../common/dto/pagination-query.dto';
 
 import { Seat } from '../seats/entities/seat.entity';
 
@@ -12,6 +14,7 @@ import { BulkCreateSeatsDto } from './dto/bulk-create-seats.dto';
 import { BulkUpdateSeatsDto } from './dto/bulk-update-seats.dto';
 import { CreateSectionDto } from './dto/create-section.dto';
 import { CreateVenueDto } from './dto/create-venue.dto';
+import { ListVenuesQueryDto } from './dto/list-venues-query.dto';
 import { UpdateSectionDto } from './dto/update-section.dto';
 import { UpdateVenueDto } from './dto/update-venue.dto';
 
@@ -44,13 +47,34 @@ export class VenueService {
     };
   }
 
-  async findAllVenues() {
-    return await this.venueRepository.find({
-      relations: ['sections'],
-      order: {
-        createdAt: 'DESC',
-      },
-    });
+  async findAllVenues(query: ListVenuesQueryDto) {
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      sortBy = 'createdAt',
+      sortOrder = SortOrder.DESC,
+    } = query;
+
+    const skip = (page - 1) * limit;
+
+    const qb = this.venueRepository
+      .createQueryBuilder('venue')
+      .leftJoinAndSelect('venue.sections', 'sections')
+      .orderBy(`venue.${sortBy}`, sortOrder)
+      .skip(skip)
+      .take(limit);
+
+    if (search) {
+      qb.andWhere(
+        '(venue.name ILIKE :search OR venue.city ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    const [venues, total] = await qb.getManyAndCount();
+
+    return buildPaginatedResponse('Venues retrieved successfully', venues, total, page, limit);
   }
 
   async findVenueById(id: string) {
