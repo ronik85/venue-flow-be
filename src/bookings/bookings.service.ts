@@ -71,7 +71,8 @@ export class BookingsService {
       async (manager) => {
         const lockedSeats = await manager
           .createQueryBuilder(EventSeat, 'es')
-          .setLock('pessimistic_write', undefined, ['SKIP LOCKED'])
+          .setLock('pessimistic_write')
+          .setOnLocked('skip_locked')
           .where('es.id IN (:...ids)', { ids: dto.eventSeatIds })
           .andWhere('es.event_id = :eventId', { eventId: dto.eventId })
           .getMany();

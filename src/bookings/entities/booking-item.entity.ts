@@ -12,7 +12,6 @@ import { Booking } from './booking.entity';
 
 @Entity({ name: 'booking_items' })
 @Index(['bookingId'])
-@Index(['eventSeatId'], { unique: true }) // One seat can only be in one active booking
 @Check('"price_at_booking" >= 0')
 export class BookingItem extends BaseEntity {
   @Column({ name: 'booking_id', type: 'uuid' })

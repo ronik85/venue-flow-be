@@ -1,15 +1,20 @@
 import {
   BadRequestException,
+  ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Seat } from '../seats/entities/seat.entity';
+import { JwtUser } from '../auth/interfaces/request-with-user.interface';
+import { UserRole } from '../users/entities/user.entity';
 import { Venue } from '../venue/entities/venue.entity';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventSeatStatus } from './entities/enums/event-seat-status.enum';
+import { EventStatus } from './entities/enums/event-status.enum';
 import { EventSeat } from './entities/event-seat.entity';
 import { Event } from './entities/event.entity';
 
@@ -26,6 +31,16 @@ export class EventsService {
     private readonly seatRepository: Repository<Seat>,
     private readonly dataSource: DataSource,
   ) { }
+
+  // ─── Ownership helper ──────────────────────────────────────────────────────
+
+  private assertOwnership(event: Event, user: JwtUser): void {
+    if (user.role !== UserRole.ADMIN && event.organizerId !== user.id) {
+      throw new ForbiddenException('You do not have permission to modify this event');
+    }
+  }
+
+  // ─── Create ────────────────────────────────────────────────────────────────
 
   async createEvent(dto: CreateEventDto, organizerId: string) {
     const venueExists = await this.venueRepository.existsBy({
@@ -77,6 +92,8 @@ export class EventsService {
     };
   }
 
+  // ─── List ──────────────────────────────────────────────────────────────────
+
   async listEvents() {
     const events = await this.eventRepository.find({
       relations: { venue: true },
@@ -89,6 +106,8 @@ export class EventsService {
       data: events,
     };
   }
+
+  // ─── Get by ID ─────────────────────────────────────────────────────────────
 
   async getEventById(id: string) {
     const event = await this.eventRepository.findOne({
@@ -111,19 +130,45 @@ export class EventsService {
     };
   }
 
-  async updateEvent(id: string, dto: UpdateEventDto, organizerId: string) {
+  // ─── Get Seats ─────────────────────────────────────────────────────────────
+
+  async getEventSeats(eventId: string) {
+    const eventExists = await this.eventRepository.existsBy({ id: eventId });
+    if (!eventExists) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    const eventSeats = await this.eventSeatRepository.find({
+      where: { eventId },
+      relations: { seat: true },
+      order: { seat: { row: 'ASC', seatNumber: 'ASC' } },
+    });
+
+    const data = eventSeats.map((es) => ({
+      id: es.id,
+      row: es.seat.row,
+      seatNumber: es.seat.seatNumber,
+      price: es.price,
+      status: es.status,
+    }));
+
+    return {
+      message: 'Event seats retrieved successfully',
+      total: data.length,
+      data,
+    };
+  }
+
+  // ─── Update ────────────────────────────────────────────────────────────────
+
+  async updateEvent(id: string, dto: UpdateEventDto, user: JwtUser) {
     const event = await this.eventRepository.findOneBy({ id });
 
     if (!event) {
       throw new NotFoundException(`Event with ID ${id} not found`);
     }
 
-    // Authorization — only the original organizer (or admin, handled via guard) may update
-    if (event.organizerId !== organizerId) {
-      throw new BadRequestException(
-        'You are not authorized to update this event',
-      );
-    }
+    this.assertOwnership(event, user);
 
     if (dto.venueId && dto.venueId !== event.venueId) {
       const venueExists = await this.venueRepository.existsBy({
@@ -145,6 +190,56 @@ export class EventsService {
     return {
       message: 'Event updated successfully',
       data: updatedEvent,
+    };
+  }
+
+  // ─── Publish ───────────────────────────────────────────────────────────────
+
+  async publishEvent(id: string, user: JwtUser) {
+    const event = await this.eventRepository.findOneBy({ id });
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${id} not found`);
+    }
+
+    this.assertOwnership(event, user);
+
+    if (event.status === EventStatus.PUBLISHED) {
+      throw new ConflictException('Event is already published');
+    }
+
+    // Ensure the event has at least one seat before going live
+    const seatCount = await this.eventSeatRepository.countBy({ eventId: id });
+    if (seatCount === 0) {
+      throw new BadRequestException(
+        'Cannot publish an event with no seats configured',
+      );
+    }
+
+    event.status = EventStatus.PUBLISHED;
+    const published = await this.eventRepository.save(event);
+
+    return {
+      message: 'Event published successfully',
+      data: published,
+    };
+  }
+
+  // ─── Delete ────────────────────────────────────────────────────────────────
+
+  async deleteEvent(id: string, user: JwtUser) {
+    const event = await this.eventRepository.findOneBy({ id });
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${id} not found`);
+    }
+
+    this.assertOwnership(event, user);
+
+    await this.eventRepository.delete(id);
+
+    return {
+      message: 'Event deleted successfully',
     };
   }
 }
