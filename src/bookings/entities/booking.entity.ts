@@ -61,6 +61,13 @@ export class Booking extends BaseEntity {
   cancelledAt?: Date;
 
   @Column({
+    name: 'expires_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  expiresAt?: Date;
+
+  @Column({
     name: 'cancellation_reason',
     type: 'text',
     nullable: true,

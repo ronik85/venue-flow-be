@@ -34,13 +34,15 @@ export class EventsService {
     @InjectRepository(Seat)
     private readonly seatRepository: Repository<Seat>,
     private readonly dataSource: DataSource,
-  ) { }
+  ) {}
 
   // ─── Ownership helper ──────────────────────────────────────────────────────
 
   private assertOwnership(event: Event, user: JwtUser): void {
     if (user.role !== UserRole.ADMIN && event.organizerId !== user.id) {
-      throw new ForbiddenException('You do not have permission to modify this event');
+      throw new ForbiddenException(
+        'You do not have permission to modify this event',
+      );
     }
   }
 
@@ -130,7 +132,13 @@ export class EventsService {
 
     const [events, total] = await qb.getManyAndCount();
 
-    return buildPaginatedResponse('Events retrieved successfully', events, total, page, limit);
+    return buildPaginatedResponse(
+      'Events retrieved successfully',
+      events,
+      total,
+      page,
+      limit,
+    );
   }
 
   // ─── Get by ID ─────────────────────────────────────────────────────────────
@@ -164,12 +172,7 @@ export class EventsService {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
-    const {
-      status,
-      row,
-      sortBy = 'row',
-      sortOrder = SortOrder.ASC,
-    } = query;
+    const { status, row, sortBy = 'row', sortOrder = SortOrder.ASC } = query;
 
     const qb = this.eventSeatRepository
       .createQueryBuilder('es')

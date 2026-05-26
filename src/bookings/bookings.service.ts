@@ -41,7 +41,7 @@ export class BookingsService {
     private readonly eventRepository: Repository<Event>,
 
     private readonly dataSource: DataSource,
-  ) { }
+  ) {}
 
   // ────────────────────────────────────────────────────────────────────────────
   // WRITE OPERATIONS
@@ -111,6 +111,7 @@ export class BookingsService {
           eventId: dto.eventId,
           status: BookingStatus.PENDING,
           totalAmount: totalAmount.toFixed(2),
+          expiresAt: new Date(Date.now() + 1 * 60 * 1000),
         });
         const savedBooking = await manager.save(newBooking);
 
@@ -198,8 +199,11 @@ export class BookingsService {
   ) {
     const booking = await this.findBookingOwnedBy(bookingId, userId, userRole);
 
-    if (booking.status === BookingStatus.CANCELLED) {
-      throw new BadRequestException('Booking is already cancelled');
+    if (
+      booking.status === BookingStatus.CANCELLED ||
+      booking.status === BookingStatus.EXPIRED
+    ) {
+      throw new BadRequestException(`Cannot cancel ${booking.status} booking`);
     }
 
     await this.dataSource.transaction(async (manager) => {
@@ -265,7 +269,13 @@ export class BookingsService {
 
     const [bookings, total] = await qb.getManyAndCount();
 
-    return buildPaginatedResponse('Bookings retrieved successfully', bookings, total, page, limit);
+    return buildPaginatedResponse(
+      'Bookings retrieved successfully',
+      bookings,
+      total,
+      page,
+      limit,
+    );
   }
 
   async getBookingById(bookingId: string, userId: string, userRole: UserRole) {
@@ -314,7 +324,13 @@ export class BookingsService {
 
     const [bookings, total] = await qb.getManyAndCount();
 
-    return buildPaginatedResponse('All bookings retrieved successfully', bookings, total, page, limit);
+    return buildPaginatedResponse(
+      'All bookings retrieved successfully',
+      bookings,
+      total,
+      page,
+      limit,
+    );
   }
 
   // ────────────────────────────────────────────────────────────────────────────

@@ -27,7 +27,7 @@ async function bootstrap() {
     .setTitle('VenueFlow API')
     .setDescription(
       'Backend API for VenueFlow — a venue & event booking platform.\n\n' +
-      '**Authentication:** All protected routes require a Bearer JWT token obtained from `POST /v1/auth/login`.',
+        '**Authentication:** All protected routes require a Bearer JWT token obtained from `POST /v1/auth/login`.',
     )
     .setVersion('1.0')
     .addBearerAuth(
@@ -51,8 +51,12 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT ?? 3000);
 
-  console.log(`\n🚀 VenueFlow API running at http://localhost:${process.env.PORT ?? 3000}/v1`);
-  console.log(`📄 Swagger docs at  http://localhost:${process.env.PORT ?? 3000}/docs\n`);
+  console.log(
+    `\n🚀 VenueFlow API running at http://localhost:${process.env.PORT ?? 3000}/v1`,
+  );
+  console.log(
+    `📄 Swagger docs at  http://localhost:${process.env.PORT ?? 3000}/docs\n`,
+  );
 }
 
 void bootstrap();

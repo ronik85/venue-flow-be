@@ -34,7 +34,7 @@ export class VenueService {
     private readonly seatRepository: Repository<Seat>,
 
     private readonly dataSource: DataSource,
-  ) { }
+  ) {}
 
   async createVenue(dto: CreateVenueDto) {
     const venue = this.venueRepository.create(dto);
@@ -66,15 +66,20 @@ export class VenueService {
       .take(limit);
 
     if (search) {
-      qb.andWhere(
-        '(venue.name ILIKE :search OR venue.city ILIKE :search)',
-        { search: `%${search}%` },
-      );
+      qb.andWhere('(venue.name ILIKE :search OR venue.city ILIKE :search)', {
+        search: `%${search}%`,
+      });
     }
 
     const [venues, total] = await qb.getManyAndCount();
 
-    return buildPaginatedResponse('Venues retrieved successfully', venues, total, page, limit);
+    return buildPaginatedResponse(
+      'Venues retrieved successfully',
+      venues,
+      total,
+      page,
+      limit,
+    );
   }
 
   async findVenueById(id: string) {
@@ -96,9 +101,7 @@ export class VenueService {
     });
 
     if (!venueExists) {
-      throw new NotFoundException(
-        `Venue with ID ${dto.venueId} not found`,
-      );
+      throw new NotFoundException(`Venue with ID ${dto.venueId} not found`);
     }
 
     const section = this.sectionRepository.create(dto);
@@ -144,9 +147,7 @@ export class VenueService {
     });
 
     const existingSeatSet = new Set(
-      existingSeats.map(
-        (seat) => `${seat.row}-${seat.seatNumber}`,
-      ),
+      existingSeats.map((seat) => `${seat.row}-${seat.seatNumber}`),
     );
 
     const duplicateSeats = seats.filter((seat) =>
@@ -154,16 +155,12 @@ export class VenueService {
     );
 
     if (duplicateSeats.length > 0) {
-      throw new BadRequestException(
-        'Some seats already exist in this section',
-      );
+      throw new BadRequestException('Some seats already exist in this section');
     }
 
-    const savedSeats = await this.dataSource.transaction(
-      async (manager) => {
-        return await manager.save(seats);
-      },
-    );
+    const savedSeats = await this.dataSource.transaction(async (manager) => {
+      return await manager.save(seats);
+    });
 
     return {
       message: 'Seats created successfully',
@@ -176,8 +173,7 @@ export class VenueService {
 
     const updatedVenue = this.venueRepository.merge(venue, dto);
 
-    const savedVenue =
-      await this.venueRepository.save(updatedVenue);
+    const savedVenue = await this.venueRepository.save(updatedVenue);
 
     return {
       message: 'Venue updated successfully',
@@ -201,16 +197,12 @@ export class VenueService {
     });
 
     if (!section) {
-      throw new NotFoundException(
-        `Venue section with ID ${id} not found`,
-      );
+      throw new NotFoundException(`Venue section with ID ${id} not found`);
     }
 
-    const updatedSection =
-      this.sectionRepository.merge(section, dto);
+    const updatedSection = this.sectionRepository.merge(section, dto);
 
-    const savedSection =
-      await this.sectionRepository.save(updatedSection);
+    const savedSection = await this.sectionRepository.save(updatedSection);
 
     return {
       message: 'Venue section updated successfully',
@@ -224,9 +216,7 @@ export class VenueService {
     });
 
     if (!section) {
-      throw new NotFoundException(
-        `Venue section with ID ${id} not found`,
-      );
+      throw new NotFoundException(`Venue section with ID ${id} not found`);
     }
 
     await this.sectionRepository.remove(section);
@@ -238,9 +228,7 @@ export class VenueService {
 
   async bulkUpdateSeats(dto: BulkUpdateSeatsDto) {
     if (!dto.seatIds || dto.seatIds.length === 0) {
-      throw new BadRequestException(
-        'Seat IDs are required',
-      );
+      throw new BadRequestException('Seat IDs are required');
     }
 
     const seats = await this.seatRepository.findBy({
@@ -248,9 +236,7 @@ export class VenueService {
     });
 
     if (seats.length !== dto.seatIds.length) {
-      throw new NotFoundException(
-        'Some seats were not found',
-      );
+      throw new NotFoundException('Some seats were not found');
     }
 
     await this.seatRepository.update(

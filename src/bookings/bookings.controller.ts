@@ -16,7 +16,6 @@ import {
   ApiBearerAuth,
   ApiOperation,
   ApiParam,
-  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -31,14 +30,13 @@ import { CancelBookingDto } from './dto/cancel-booking.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { ListBookingsQueryDto } from './dto/list-bookings-query.dto';
 import { ListMyBookingsQueryDto } from './dto/list-my-bookings-query.dto';
-import { BookingStatus } from './entities/enums/booking-status.enum';
 
 @ApiTags('Bookings')
 @ApiBearerAuth('access-token')
 @Controller('bookings')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class BookingsController {
-  constructor(private readonly bookingsService: BookingsService) { }
+  constructor(private readonly bookingsService: BookingsService) {}
 
   // ── Customer routes ────────────────────────────────────────────────────────
 
@@ -46,12 +44,22 @@ export class BookingsController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create a booking',
-    description: 'Locks the selected event-seats and creates a PENDING booking. Seats transition: AVAILABLE → LOCKED.',
+    description:
+      'Locks the selected event-seats and creates a PENDING booking. Seats transition: AVAILABLE → LOCKED.',
   })
-  @ApiResponse({ status: 201, description: 'Booking created (PENDING), seats locked' })
-  @ApiResponse({ status: 400, description: 'Event not published or invalid input' })
+  @ApiResponse({
+    status: 201,
+    description: 'Booking created (PENDING), seats locked',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Event not published or invalid input',
+  })
   @ApiResponse({ status: 404, description: 'Event or seat IDs not found' })
-  @ApiResponse({ status: 409, description: 'One or more seats are not available' })
+  @ApiResponse({
+    status: 409,
+    description: 'One or more seats are not available',
+  })
   async createBooking(
     @CurrentUser() user: JwtUser,
     @Body() dto: CreateBookingDto,
@@ -60,7 +68,10 @@ export class BookingsController {
   }
 
   @Get('me')
-  @ApiOperation({ summary: "List the authenticated user's own bookings with optional filter and pagination" })
+  @ApiOperation({
+    summary:
+      "List the authenticated user's own bookings with optional filter and pagination",
+  })
   @ApiResponse({ status: 200, description: 'Paginated list of own bookings' })
   async getMyBookings(
     @CurrentUser() user: JwtUser,
@@ -72,7 +83,10 @@ export class BookingsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get a single booking by ID (owner or admin)' })
   @ApiParam({ name: 'id', description: 'Booking UUID' })
-  @ApiResponse({ status: 200, description: 'Booking details with seats and event' })
+  @ApiResponse({
+    status: 200,
+    description: 'Booking details with seats and event',
+  })
   @ApiResponse({ status: 403, description: 'Not your booking' })
   @ApiResponse({ status: 404, description: 'Booking not found' })
   async getBookingById(
@@ -85,7 +99,8 @@ export class BookingsController {
   @Patch(':id/confirm')
   @ApiOperation({
     summary: 'Confirm a PENDING booking',
-    description: 'Transitions the booking to CONFIRMED and marks seats as BOOKED.',
+    description:
+      'Transitions the booking to CONFIRMED and marks seats as BOOKED.',
   })
   @ApiParam({ name: 'id', description: 'Booking UUID' })
   @ApiResponse({ status: 200, description: 'Booking confirmed, seats BOOKED' })
@@ -106,7 +121,10 @@ export class BookingsController {
     description: 'Cancels the booking and releases seats back to AVAILABLE.',
   })
   @ApiParam({ name: 'id', description: 'Booking UUID' })
-  @ApiResponse({ status: 200, description: 'Booking cancelled, seats released' })
+  @ApiResponse({
+    status: 200,
+    description: 'Booking cancelled, seats released',
+  })
   @ApiResponse({ status: 400, description: 'Booking already cancelled' })
   @ApiResponse({ status: 403, description: 'Not your booking' })
   @ApiResponse({ status: 404, description: 'Booking not found' })
@@ -122,7 +140,9 @@ export class BookingsController {
 
   @Get()
   @Roles(UserRole.ADMIN)
-  @ApiOperation({ summary: 'List all bookings with pagination, filters and sorting [ADMIN]' })
+  @ApiOperation({
+    summary: 'List all bookings with pagination, filters and sorting [ADMIN]',
+  })
   @ApiResponse({ status: 200, description: 'Paginated list of all bookings' })
   async adminListBookings(@Query() query: ListBookingsQueryDto) {
     return this.bookingsService.adminListBookings(query);
