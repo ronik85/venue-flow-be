@@ -2,11 +2,15 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Inject,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { buildPaginatedResponse } from '../common/dto/paginated-response.helper';
 import { SortOrder } from '../common/dto/pagination-query.dto';
+import { CACHE_KEYS, CACHE_TTL } from '../common/constants/cache.constants';
 
 import { Seat } from '../seats/entities/seat.entity';
 
@@ -34,7 +38,10 @@ export class VenueService {
     private readonly seatRepository: Repository<Seat>,
 
     private readonly dataSource: DataSource,
-  ) {}
+
+    @Inject(CACHE_MANAGER)
+    private readonly cacheManager: Cache,
+  ) { }
 
   async createVenue(dto: CreateVenueDto) {
     const venue = this.venueRepository.create(dto);
@@ -48,6 +55,10 @@ export class VenueService {
   }
 
   async findAllVenues(query: ListVenuesQueryDto) {
+    const cacheKey = CACHE_KEYS.VENUE_LIST(query);
+    const cachedData = await this.cacheManager.get(cacheKey);
+    if (cachedData) return cachedData;
+
     const {
       page = 1,
       limit = 10,
@@ -73,16 +84,23 @@ export class VenueService {
 
     const [venues, total] = await qb.getManyAndCount();
 
-    return buildPaginatedResponse(
+    const result = buildPaginatedResponse(
       'Venues retrieved successfully',
       venues,
       total,
       page,
       limit,
     );
+
+    await this.cacheManager.set(cacheKey, result, CACHE_TTL.SHORT);
+    return result;
   }
 
-  async findVenueById(id: string) {
+  async findVenueById(id: string): Promise<Venue> {
+    const cacheKey = CACHE_KEYS.VENUE_DETAIL(id);
+    const cachedData = await this.cacheManager.get<Venue>(cacheKey);
+    if (cachedData) return cachedData;
+
     const venue = await this.venueRepository.findOne({
       where: { id },
       relations: ['sections', 'sections.seats'],
@@ -92,6 +110,7 @@ export class VenueService {
       throw new NotFoundException(`Venue with ID ${id} not found`);
     }
 
+    await this.cacheManager.set(cacheKey, venue, CACHE_TTL.MEDIUM);
     return venue;
   }
 
@@ -107,6 +126,8 @@ export class VenueService {
     const section = this.sectionRepository.create(dto);
 
     const savedSection = await this.sectionRepository.save(section);
+
+    await this.cacheManager.del(CACHE_KEYS.VENUE_DETAIL(dto.venueId));
 
     return {
       message: 'Venue section created successfully',
@@ -162,6 +183,8 @@ export class VenueService {
       return await manager.save(seats);
     });
 
+    await this.cacheManager.del(CACHE_KEYS.VENUE_DETAIL(section.venueId));
+
     return {
       message: 'Seats created successfully',
       count: savedSeats.length,
@@ -175,6 +198,8 @@ export class VenueService {
 
     const savedVenue = await this.venueRepository.save(updatedVenue);
 
+    await this.cacheManager.del(CACHE_KEYS.VENUE_DETAIL(id));
+
     return {
       message: 'Venue updated successfully',
       data: savedVenue,
@@ -185,6 +210,8 @@ export class VenueService {
     const venue = await this.findVenueById(id);
 
     await this.venueRepository.remove(venue);
+
+    await this.cacheManager.del(CACHE_KEYS.VENUE_DETAIL(id));
 
     return {
       message: 'Venue deleted successfully',
@@ -204,6 +231,8 @@ export class VenueService {
 
     const savedSection = await this.sectionRepository.save(updatedSection);
 
+    await this.cacheManager.del(CACHE_KEYS.VENUE_DETAIL(section.venueId));
+
     return {
       message: 'Venue section updated successfully',
       data: savedSection,
@@ -220,6 +249,8 @@ export class VenueService {
     }
 
     await this.sectionRepository.remove(section);
+
+    await this.cacheManager.del(CACHE_KEYS.VENUE_DETAIL(section.venueId));
 
     return {
       message: 'Venue section deleted successfully',
@@ -247,6 +278,14 @@ export class VenueService {
         isAccessible: dto.isAccessible,
       },
     );
+
+    const firstSeat = await this.seatRepository.findOne({
+      where: { id: dto.seatIds[0] },
+      relations: ['section'],
+    });
+    if (firstSeat) {
+      await this.cacheManager.del(CACHE_KEYS.VENUE_DETAIL(firstSeat.section.venueId));
+    }
 
     return {
       message: 'Seats updated successfully',

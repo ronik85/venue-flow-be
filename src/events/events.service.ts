@@ -4,11 +4,15 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Inject,
 } from '@nestjs/common';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { buildPaginatedResponse } from '../common/dto/paginated-response.helper';
 import { SortOrder } from '../common/dto/pagination-query.dto';
+import { CACHE_KEYS, CACHE_TTL } from '../common/constants/cache.constants';
 import { Seat } from '../seats/entities/seat.entity';
 import { JwtUser } from '../auth/interfaces/request-with-user.interface';
 import { UserRole } from '../users/entities/user.entity';
@@ -34,7 +38,9 @@ export class EventsService {
     @InjectRepository(Seat)
     private readonly seatRepository: Repository<Seat>,
     private readonly dataSource: DataSource,
-  ) {}
+    @Inject(CACHE_MANAGER)
+    private readonly cacheManager: Cache,
+  ) { }
 
   // ─── Ownership helper ──────────────────────────────────────────────────────
 
@@ -101,6 +107,10 @@ export class EventsService {
   // ─── List ──────────────────────────────────────────────────────────────────
 
   async listEvents(query: ListEventsQueryDto) {
+    const cacheKey = CACHE_KEYS.EVENT_LIST(query);
+    const cachedData = await this.cacheManager.get(cacheKey);
+    if (cachedData) return cachedData;
+
     const {
       page = 1,
       limit = 10,
@@ -132,18 +142,24 @@ export class EventsService {
 
     const [events, total] = await qb.getManyAndCount();
 
-    return buildPaginatedResponse(
+    const result = buildPaginatedResponse(
       'Events retrieved successfully',
       events,
       total,
       page,
       limit,
     );
+    await this.cacheManager.set(cacheKey, result, CACHE_TTL.SHORT);
+    return result;
   }
 
   // ─── Get by ID ─────────────────────────────────────────────────────────────
 
   async getEventById(id: string) {
+    const cacheKey = CACHE_KEYS.EVENT_DETAIL(id);
+    const cachedData = await this.cacheManager.get(cacheKey);
+    if (cachedData) return cachedData;
+
     const event = await this.eventRepository.findOne({
       where: { id },
       relations: {
@@ -158,10 +174,13 @@ export class EventsService {
       throw new NotFoundException(`Event with ID ${id} not found`);
     }
 
-    return {
+    const result = {
       message: 'Event retrieved successfully',
       data: event,
     };
+
+    await this.cacheManager.set(cacheKey, result, CACHE_TTL.MEDIUM);
+    return result;
   }
 
   // ─── Get Seats ─────────────────────────────────────────────────────────────
@@ -232,6 +251,9 @@ export class EventsService {
     if (dto.status !== undefined) event.status = dto.status;
 
     const updatedEvent = await this.eventRepository.save(event);
+
+    await this.cacheManager.del(CACHE_KEYS.EVENT_DETAIL(id));
+
     return {
       message: 'Event updated successfully',
       data: updatedEvent,
@@ -264,6 +286,8 @@ export class EventsService {
     event.status = EventStatus.PUBLISHED;
     const published = await this.eventRepository.save(event);
 
+    await this.cacheManager.del(CACHE_KEYS.EVENT_DETAIL(id));
+
     return {
       message: 'Event published successfully',
       data: published,
@@ -282,6 +306,8 @@ export class EventsService {
     this.assertOwnership(event, user);
 
     await this.eventRepository.delete(id);
+
+    await this.cacheManager.del(CACHE_KEYS.EVENT_DETAIL(id));
 
     return {
       message: 'Event deleted successfully',
