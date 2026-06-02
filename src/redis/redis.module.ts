@@ -22,4 +22,4 @@ import KeyvRedis from '@keyv/redis';
 
   exports: [CacheModule],
 })
-export class RedisModule { }
+export class RedisModule {}

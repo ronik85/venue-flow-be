@@ -48,6 +48,9 @@ export class VenueService {
 
     const savedVenue = await this.venueRepository.save(venue);
 
+    // Clear cache to invalidate list caches
+    await this.cacheManager.clear?.();
+
     return {
       message: 'Venue created successfully',
       data: savedVenue,
@@ -212,6 +215,8 @@ export class VenueService {
     await this.venueRepository.remove(venue);
 
     await this.cacheManager.del(CACHE_KEYS.VENUE_DETAIL(id));
+    // Clear cache to invalidate list caches
+    await this.cacheManager.clear?.();
 
     return {
       message: 'Venue deleted successfully',
@@ -284,7 +289,9 @@ export class VenueService {
       relations: ['section'],
     });
     if (firstSeat) {
-      await this.cacheManager.del(CACHE_KEYS.VENUE_DETAIL(firstSeat.section.venueId));
+      await this.cacheManager.del(
+        CACHE_KEYS.VENUE_DETAIL(firstSeat.section.venueId),
+      );
     }
 
     return {

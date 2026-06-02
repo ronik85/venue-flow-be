@@ -17,7 +17,7 @@ import {
   ApiOperation,
   ApiParam,
   ApiResponse,
-  ApiTags
+  ApiTags,
 } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -34,7 +34,7 @@ import { EventsService } from './events.service';
 @ApiTags('Events')
 @Controller('events')
 export class EventsController {
-  constructor(private readonly eventsService: EventsService) { }
+  constructor(private readonly eventsService: EventsService) {}
 
   // ─── Organizer / Admin routes ──────────────────────────────────────────────
 
@@ -43,7 +43,8 @@ export class EventsController {
   @Roles(UserRole.ORGANIZER, UserRole.ADMIN)
   @ApiBearerAuth('access-token')
   @ApiOperation({
-    summary: 'Create a new event and auto-generate event seats [ORGANIZER, ADMIN]',
+    summary:
+      'Create a new event and auto-generate event seats [ORGANIZER, ADMIN]',
   })
   @ApiResponse({ status: 201, description: 'Event created with seats' })
   @ApiResponse({ status: 400, description: 'Venue has no seats configured' })
@@ -116,16 +117,24 @@ export class EventsController {
   // ─── Public routes ─────────────────────────────────────────────────────────
 
   @Get()
-  @ApiOperation({ summary: 'List events with pagination, search, filters and sorting (public)' })
+  @ApiOperation({
+    summary:
+      'List events with pagination, search, filters and sorting (public)',
+  })
   @ApiResponse({ status: 200, description: 'Paginated list of events' })
   async listEvents(@Query() query: ListEventsQueryDto) {
     return this.eventsService.listEvents(query);
   }
 
   @Get(':id/seats')
-  @ApiOperation({ summary: 'Get all seats for an event with filters and sorting (public)' })
+  @ApiOperation({
+    summary: 'Get all seats for an event with filters and sorting (public)',
+  })
   @ApiParam({ name: 'id', description: 'Event UUID' })
-  @ApiResponse({ status: 200, description: 'Filtered and sorted event seat list' })
+  @ApiResponse({
+    status: 200,
+    description: 'Filtered and sorted event seat list',
+  })
   @ApiResponse({ status: 404, description: 'Event not found' })
   async getEventSeats(
     @Param('id', ParseUUIDPipe) id: string,
@@ -137,7 +146,10 @@ export class EventsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get event details including all seats (public)' })
   @ApiParam({ name: 'id', description: 'Event UUID' })
-  @ApiResponse({ status: 200, description: 'Event with venue and seat details' })
+  @ApiResponse({
+    status: 200,
+    description: 'Event with venue and seat details',
+  })
   @ApiResponse({ status: 404, description: 'Event not found' })
   async getEventById(@Param('id', ParseUUIDPipe) id: string) {
     return this.eventsService.getEventById(id);

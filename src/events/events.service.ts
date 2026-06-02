@@ -40,7 +40,7 @@ export class EventsService {
     private readonly dataSource: DataSource,
     @Inject(CACHE_MANAGER)
     private readonly cacheManager: Cache,
-  ) { }
+  ) {}
 
   // ─── Ownership helper ──────────────────────────────────────────────────────
 
@@ -196,6 +196,7 @@ export class EventsService {
     const qb = this.eventSeatRepository
       .createQueryBuilder('es')
       .leftJoinAndSelect('es.seat', 'seat')
+      .leftJoinAndSelect('seat.section', 'section')
       .where('es.eventId = :eventId', { eventId })
       .orderBy(`seat.${sortBy}`, sortOrder);
 
@@ -214,6 +215,7 @@ export class EventsService {
       seatNumber: es.seat.seatNumber,
       price: es.price,
       status: es.status,
+      sectionName: es.seat.section?.name,
     }));
 
     return {
